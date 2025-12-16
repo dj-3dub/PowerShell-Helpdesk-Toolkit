@@ -1,9 +1,9 @@
-# Output / logs / bundles
+# Output / logs
 out/
 *.zip
 *.txt
 
-# Windows "Mark of the Web" + ADS artifacts that sometimes show up in WSL views
+# Windows ADS artifacts
 *:Zone.Identifier
 
 # OS/editor
