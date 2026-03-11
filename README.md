@@ -117,7 +117,7 @@ Some actions may require administrative privileges depending on the task being p
 ## Author
 
 **Tim Heverin**  
-GitHub: https://github.com/dj-3dub
+LinkedIn: https://www.linkedin.com/in/tim-heverin/
 
 ---
 
