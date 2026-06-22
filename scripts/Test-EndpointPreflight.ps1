@@ -180,7 +180,7 @@ if ($TestHost) {
         $connResult = Test-NetConnection -ComputerName $TestHost -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
     }
     catch {
-        Write-Warning "Test-NetConnection failed for $TestHost: $($_.Exception.Message)"
+        Write-Warning "Test-NetConnection failed for ${TestHost}: $($_.Exception.Message)"
     }
 
     if ($connResult) {

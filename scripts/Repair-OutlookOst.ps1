@@ -64,11 +64,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Load common utilities
+. (Join-Path $PSScriptRoot 'Common.ps1')
+
 Write-Verbose "Starting Outlook OST repair. Mode=$Mode, Identity='$Identity', Backup=$Backup"
 
 # --- Repo root + output folders (WSL/UNC safe) ---
-$repoRoot   = Split-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -Parent
-$outputRoot = Join-Path $repoRoot 'out\OutlookOstRepair'
+$outputRoot = Join-Path $global:RepoRoot 'out\OutlookOstRepair'
 $sessionTs  = Get-Date -Format 'yyyyMMdd-HHmmss'
 $sessionRoot = Join-Path $outputRoot ("Session_{0}_{1}" -f $env:COMPUTERNAME, $sessionTs)
 
@@ -80,7 +82,7 @@ $null = New-Item -Path $sessionRoot -ItemType Directory -Force -ErrorAction Sile
 $null = New-Item -Path $backupsRoot -ItemType Directory -Force -ErrorAction SilentlyContinue
 $null = New-Item -Path $logsRoot    -ItemType Directory -Force -ErrorAction SilentlyContinue
 
-Write-Verbose "Repo root    : $repoRoot"
+Write-Verbose "Repo root    : $global:RepoRoot"
 Write-Verbose "Session root : $sessionRoot"
 
 function Write-Log {
@@ -270,4 +272,5 @@ foreach ($ost in $targetOsts) {
 Write-Host ""
 Write-Host "Outlook OST repair complete. Logs at: $logsRoot" -ForegroundColor Green
 Write-Log "Outlook OST repair completed."
+Write-AuditLog -Severity INFO -Action "RepairOutlookOst" -Message "Completed Outlook OST repair in mode: $Mode. Session root: $sessionRoot"
 

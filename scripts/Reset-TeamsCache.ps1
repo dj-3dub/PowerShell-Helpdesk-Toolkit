@@ -1,21 +1,13 @@
-<#
-.SYNOPSIS
-    Clears Microsoft Teams cache for the current user.
-
-.DESCRIPTION
-    Closes Teams, removes cached files, and restarts Teams if desired.
-
-.EXAMPLE
-    .\Reset-TeamsCache.ps1 -Verbose
-
-.NOTES
-    Safe to run. Teams will recreate all cache folders on launch.
-#>
-
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [switch]$Restart
 )
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+# Load common utilities
+. (Join-Path $PSScriptRoot 'Common.ps1')
 
 $teamsPaths = @(
     "$env:APPDATA\Microsoft\Teams",
@@ -24,20 +16,38 @@ $teamsPaths = @(
 )
 
 Write-Verbose "Closing Teams..."
-Get-Process Teams -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-
-foreach ($path in $teamsPaths) {
-    if (Test-Path $path) {
-        Write-Verbose "Removing Teams cache folder '$path'"
-        if ($PSCmdlet.ShouldProcess($path, "Remove folder")) {
-            Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue
+try {
+    Get-Process Teams -ErrorAction SilentlyContinue | Stop-Process -Force
+    
+    $clearedPaths = @()
+    foreach ($path in $teamsPaths) {
+        if (Test-Path $path) {
+            Write-Verbose "Removing Teams cache folder '$path'"
+            if ($PSCmdlet.ShouldProcess($path, "Remove folder")) {
+                Remove-Item $path -Recurse -Force
+                $clearedPaths += $path
+            }
         }
     }
-}
 
-if ($Restart) {
-    Write-Verbose "Restarting Teams..."
-    Start-Process "$env:LOCALAPPDATA\Microsoft\Teams\Update.exe" "--processStart 'Teams.exe'"
-}
+    if ($Restart) {
+        Write-Verbose "Restarting Teams..."
+        $launcher = "$env:LOCALAPPDATA\Microsoft\Teams\Update.exe"
+        if (Test-Path $launcher) {
+            Start-Process $launcher "--processStart 'Teams.exe'"
+        } else {
+            Write-Warning "Could not find Teams launcher at $launcher to restart."
+        }
+    }
 
-Write-Host "Teams cache reset complete." -ForegroundColor Green
+    $msg = "Teams cache reset complete."
+    if ($clearedPaths) {
+        $msg += " Cleared paths: " + ($clearedPaths -join ", ")
+    }
+    Write-AuditLog -Severity INFO -Action "ResetTeamsCache" -Message $msg
+    Write-Host "Teams cache reset complete." -ForegroundColor Green
+}
+catch {
+    Write-AuditLog -Severity ERROR -Action "ResetTeamsCache" -Message "Failed to reset Microsoft Teams cache." -Details $_.Exception.Message
+    Write-Error "Failed to reset Microsoft Teams cache: $($_.Exception.Message)"
+}

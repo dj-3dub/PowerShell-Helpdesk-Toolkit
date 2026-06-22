@@ -289,5 +289,38 @@ process {
         $retentionInfo = Get-RetentionDetails -PolicyName $mbx.RetentionPolicy
 
         # Archive
-        $archiveEnabl
+        $archiveEnabled = $false
+        if ($mbx.ArchiveStatus -eq 'Active' -or $mbx.ArchiveDomain -or $mbx.ArchiveDatabase) {
+            $archiveEnabled = $true
+        }
+
+        $item = [pscustomobject]@{
+            UserPrincipalName       = $mbx.UserPrincipalName
+            DisplayName             = $mbx.DisplayName
+            TotalSizeGB             = $totalSizeGB
+            QuotaLimitGB            = $quotaGB
+            QuotaSource             = $quotaSource
+            PercentUsed             = $percentUsed
+            NearCapacity            = $nearCapacity
+            RetentionPolicy         = $mbx.RetentionPolicy
+            ArchiveEnabled          = $archiveEnabled
+            HasOneYearArchivePolicy = $retentionInfo.HasOneYearArchivePolicy
+            RetentionTags           = $retentionInfo.RetentionTags
+        }
+
+        $script:results.Add($item)
+        Write-Output $item
+    }
+}
+
+end {
+    if ($ExportCsv -and $script:results.Count -gt 0) {
+        if (-not $OutputPath) {
+            $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+            $OutputPath = Join-Path $exportRoot ("Test-MailboxCapacity-{0}.csv" -f $timestamp)
+        }
+        $script:results | Export-Csv -Path $OutputPath -NoTypeInformation -Encoding UTF8
+        Write-Host "Exported report to: $OutputPath" -ForegroundColor Green
+    }
+}
 

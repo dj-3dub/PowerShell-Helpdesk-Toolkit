@@ -188,7 +188,7 @@ function Test-HostConnectivity {
         $result = Test-NetConnection -ComputerName $Target -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
     }
     catch {
-        Write-Warning "Test-NetConnection failed for $Target: $($_.Exception.Message)"
+        Write-Warning "Test-NetConnection failed for ${Target}: $($_.Exception.Message)"
     }
 
     if ($result) {

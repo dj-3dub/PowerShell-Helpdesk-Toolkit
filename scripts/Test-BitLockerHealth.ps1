@@ -114,7 +114,7 @@ foreach ($vol in $volumes) {
         try {
             if ($mountPoint) {
                 $driveLetter = $mountPoint.Split(':')[0]
-                $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID = '$driveLetter:`\'" -ErrorAction SilentlyContinue
+                $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID = '${driveLetter}:`\'" -ErrorAction SilentlyContinue
                 if ($disk.Size) {
                     $capacityGB = [math]::Round(($disk.Size / 1GB), 2)
                 }

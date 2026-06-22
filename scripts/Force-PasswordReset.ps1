@@ -30,8 +30,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$scriptDir = Split-Path -Path $MyInvocation.MyCommand.Path -Parent
-$logsRoot  = Join-Path -Path (Split-Path $scriptDir -Parent) -ChildPath 'out\HelpdeskLogs'
+# Load common utilities
+. (Join-Path $PSScriptRoot 'Common.ps1')
+
+$logsRoot  = Join-Path -Path $global:RepoRoot -ChildPath 'out\HelpdeskLogs'
 
 if (-not (Test-Path $logsRoot)) {
     New-Item -Path $logsRoot -ItemType Directory -Force | Out-Null
@@ -101,6 +103,7 @@ try {
     if ($PSCmdlet.ShouldProcess($Identity, "Set-ADAccountPassword -Reset")) {
         Set-ADAccountPassword -Identity $Identity -Reset -NewPassword $tempPwd -ErrorAction Stop
         LogLine "Password reset successful."
+        Write-AuditLog -Severity INFO -Action "ForceADPasswordReset" -Message "Successfully reset AD password for $Identity."
     }
 
     if ($requireChange) {
@@ -110,6 +113,7 @@ try {
 
 } catch {
     LogLine ("Password reset failed: {0}" -f $_.Exception.Message)
+    Write-AuditLog -Severity ERROR -Action "ForceADPasswordReset" -Message "Failed to reset AD password for $Identity." -Details $_.Exception.Message
 }
 
 Section "Complete"

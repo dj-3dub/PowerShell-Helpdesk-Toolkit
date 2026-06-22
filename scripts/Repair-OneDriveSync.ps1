@@ -51,12 +51,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# --- Resolve repo root + output folders (WSL/UNC safe) ---
-$repoRoot = Split-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -Parent
-$logsRoot = Join-Path $repoRoot 'out\OneDriveLogs'
+# Load common utilities
+. (Join-Path $PSScriptRoot 'Common.ps1')
+
+$logsRoot = Join-Path $global:RepoRoot 'out\OneDriveLogs'
 $null = New-Item -Path $logsRoot -ItemType Directory -Force -ErrorAction SilentlyContinue
 
-Write-Verbose "Repo root : $repoRoot"
+Write-Verbose "Repo root : $global:RepoRoot"
 Write-Verbose "Logs root : $logsRoot"
 
 # --- OneDrive paths & process names ---
@@ -152,35 +153,44 @@ function Start-OneDriveClient {
 
 Write-Host "=== OneDrive Repair ($Mode) ===" -ForegroundColor Cyan
 
-Stop-OneDriveProcess
+try {
+    Stop-OneDriveProcess
 
-if ($BackupLogs) {
-    Backup-OneDriveLogs
-}
+    if ($BackupLogs) {
+        Backup-OneDriveLogs
+    }
 
-$exe = Get-OneDriveExecutable
+    $exe = Get-OneDriveExecutable
 
-if ($Mode -eq 'Reset') {
-    if (-not $exe) {
-        Write-Warning "Skipping reset: OneDrive executable not found."
+    if ($Mode -eq 'Reset') {
+        if (-not $exe) {
+            Write-Warning "Skipping reset: OneDrive executable not found."
+            Write-AuditLog -Severity WARNING -Action "RepairOneDriveSync" -Message "Skipped OneDrive reset because executable was not found."
+        }
+        else {
+            Reset-OneDriveClient -ExePath $exe
+            Write-AuditLog -Severity INFO -Action "RepairOneDriveSync" -Message "Issued OneDrive reset (/reset) successfully."
+        }
     }
     else {
-        Reset-OneDriveClient -ExePath $exe
+        Write-Verbose "Mode 'Soft' selected: not running /reset, just stop/start."
+        Write-AuditLog -Severity INFO -Action "RepairOneDriveSync" -Message "Performed soft OneDrive repair (restart process only)."
     }
-}
-else {
-    Write-Verbose "Mode 'Soft' selected: not running /reset, just stop/start."
-}
 
-if ($Restart) {
-    if ($exe) {
-        Start-OneDriveClient -ExePath $exe
-        Write-Host "OneDrive client restarted." -ForegroundColor Green
+    if ($Restart) {
+        if ($exe) {
+            Start-OneDriveClient -ExePath $exe
+            Write-Host "OneDrive client restarted." -ForegroundColor Green
+        }
+        else {
+            Write-Warning "Could not restart OneDrive: executable not found."
+        }
     }
     else {
-        Write-Warning "Could not restart OneDrive: executable not found."
+        Write-Host "OneDrive repair completed. You may start OneDrive manually if needed." -ForegroundColor Green
     }
 }
-else {
-    Write-Host "OneDrive repair completed. You may start OneDrive manually if needed." -ForegroundColor Green
+catch {
+    Write-AuditLog -Severity ERROR -Action "RepairOneDriveSync" -Message "Failed to repair OneDrive sync client." -Details $_.Exception.Message
+    Write-Error "Failed to repair OneDrive sync client: $($_.Exception.Message)"
 }

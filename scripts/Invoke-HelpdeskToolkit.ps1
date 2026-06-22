@@ -22,9 +22,10 @@ $ErrorActionPreference = 'Stop'
 
 # Resolve the folder that contains the helpdesk scripts
 $scriptDir = Split-Path -Path $MyInvocation.MyCommand.Path -Parent
+. (Join-Path $scriptDir 'Common.ps1')
 
 function Get-LogsDir {
-    $logsDir = Join-Path $scriptDir '..\..\out\HelpdeskLogs'
+    $logsDir = Join-Path $global:RepoRoot 'out\HelpdeskLogs'
     try { return (Resolve-Path $logsDir).Path } catch { return $logsDir }
 }
 
@@ -636,6 +637,22 @@ function Invoke-ViewInternalDnsLogs {
     Invoke-ViewLogsByPrefix -Prefix 'InternalDNS_' -Title 'Internal DNS Diagnostics Logs'
 }
 
+function Invoke-CitrixM365Diagnostics {
+    $script = Join-Path $scriptDir 'Test-CitrixGatewayAndM365Endpoints.ps1'
+    if (-not (Test-Path $script)) { Write-Warning "Missing: $script"; return }
+
+    $gateway = Read-Host "Enter Citrix Gateway/VPN host to test (optional)"
+    $ticket  = Read-Host "Enter Ticket ID (optional)"
+
+    $params = @{ Verbose = $true }
+    if (-not [string]::IsNullOrWhiteSpace($gateway)) { $params.CitrixGateway = $gateway }
+    if (-not [string]::IsNullOrWhiteSpace($ticket)) { $params.TicketId = $ticket }
+
+    Write-AuditLog -Severity INFO -Action "Launcher-CitrixM365Diagnostics" -Message "Starting Test-CitrixGatewayAndM365Endpoints.ps1"
+    & $script @params
+    Write-AuditLog -Severity INFO -Action "Launcher-CitrixM365Diagnostics" -Message "Completed Test-CitrixGatewayAndM365Endpoints.ps1"
+}
+
 
 function Show-Menu {
     Clear-Host
@@ -679,6 +696,7 @@ function Show-Menu {
     Write-Host "34)  View Outlook Auth Prompt Logs"
     Write-Host "35)  VPN connected but nothing resolves (Internal DNS diagnostics)"
     Write-Host "36)  View Internal DNS Diagnostics Logs"
+    Write-Host "37)  Citrix Gateway & M365 Endpoint Diagnostics"
     Write-Host " Q)  Quit"
     Write-Host ""
 }
@@ -724,9 +742,10 @@ do {
         '34' { Invoke-ViewOutlookAuthLogs          ; Pause }
         '35' { Invoke-InternalDnsDiagnostics       ; Pause }
         '36' { Invoke-ViewInternalDnsLogs          ; Pause }
+        '37' { Invoke-CitrixM365Diagnostics        ; Pause }
         'Q'  { Write-Host "Exiting Helpdesk Toolkit." -ForegroundColor Green }
         default {
-            Write-Host "Invalid selection. Choose 1-36 or Q." -ForegroundColor Yellow
+            Write-Host "Invalid selection. Choose 1-37 or Q." -ForegroundColor Yellow
             Pause
         }
     }

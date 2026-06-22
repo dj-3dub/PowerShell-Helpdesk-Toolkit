@@ -30,8 +30,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$scriptDir = Split-Path -Path $MyInvocation.MyCommand.Path -Parent
-$logsRoot  = Join-Path -Path (Split-Path $scriptDir -Parent) -ChildPath 'out\HelpdeskLogs'
+# Load common utilities
+. (Join-Path $PSScriptRoot 'Common.ps1')
+
+$logsRoot  = Join-Path -Path $global:RepoRoot -ChildPath 'out\HelpdeskLogs'
 
 if (-not (Test-Path $logsRoot)) {
     New-Item -Path $logsRoot -ItemType Directory -Force | Out-Null
@@ -97,9 +99,11 @@ try {
     if ($PSCmdlet.ShouldProcess($Identity, "Unlock-ADAccount")) {
         Unlock-ADAccount -Identity $Identity -ErrorAction Stop
         LogLine "Unlock successful."
+        Write-AuditLog -Severity INFO -Action "UnlockADAccount" -Message "Successfully unlocked Active Directory account for $Identity."
     }
 } catch {
     LogLine ("Unlock failed: {0}" -f $_.Exception.Message)
+    Write-AuditLog -Severity ERROR -Action "UnlockADAccount" -Message "Failed to unlock Active Directory account for $Identity." -Details $_.Exception.Message
 }
 
 Section "Complete"

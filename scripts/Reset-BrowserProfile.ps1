@@ -62,12 +62,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# --- Repo root + output folder (string-based, WSL/UNC-safe) ---
-$repoRoot = Split-Path -Path (Split-Path -Path $PSScriptRoot -Parent) -Parent
-$outputRoot = Join-Path $repoRoot 'out\BrowserBackups'
+# Load common utilities
+. (Join-Path $PSScriptRoot 'Common.ps1')
+
+$outputRoot = Join-Path $global:RepoRoot 'out\BrowserBackups'
 $null = New-Item -Path $outputRoot -ItemType Directory -Force -ErrorAction SilentlyContinue
 
-Write-Verbose "Repo root    : $repoRoot"
+Write-Verbose "Repo root    : $global:RepoRoot"
 Write-Verbose "Backup folder: $outputRoot"
 
 # --- Helper functions ---
@@ -211,48 +212,59 @@ function Restart-Browser {
 
 # --- Main logic ---
 
-$targetBrowsers = switch ($Browser) {
-    'Chrome' { @('Chrome') }
-    'Edge'   { @('Edge') }
-    'All'    { @('Chrome','Edge') }
-}
+try {
+    $targetBrowsers = switch ($Browser) {
+        'Chrome' { @('Chrome') }
+        'Edge'   { @('Edge') }
+        'All'    { @('Chrome','Edge') }
+    }
 
-foreach ($b in $targetBrowsers) {
-    switch ($b) {
-        'Chrome' {
-            $name          = 'Chrome'
-            $processNames  = @('chrome')
-            $userDataPath  = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
+    $processed = @()
+    foreach ($b in $targetBrowsers) {
+        switch ($b) {
+            'Chrome' {
+                $name          = 'Chrome'
+                $processNames  = @('chrome')
+                $userDataPath  = Join-Path $env:LOCALAPPDATA 'Google\Chrome\User Data'
+            }
+            'Edge' {
+                $name          = 'Edge'
+                $processNames  = @('msedge')
+                $userDataPath  = Join-Path $env:LOCALAPPDATA 'Microsoft\Edge\User Data'
+            }
+            default { continue }
         }
-        'Edge' {
-            $name          = 'Edge'
-            $processNames  = @('msedge')
-            $userDataPath  = Join-Path $env:LOCALAPPDATA 'Microsoft\Edge\User Data'
+
+        Write-Host "=== Processing $name ===" -ForegroundColor Cyan
+        Write-Verbose "User data path for ${name}: $userDataPath"
+
+        Stop-BrowserProcess -ProcessNames $processNames
+
+        if ($Backup) {
+            Backup-BrowserProfile -BrowserName $name -UserDataPath $userDataPath
         }
-        default { continue }
+
+        if ($ClearCacheOnly) {
+            Clear-BrowserCacheFolders -BrowserName $name -UserDataPath $userDataPath
+            Write-AuditLog -Severity INFO -Action "ResetBrowserProfile" -Message "Cleared cache for $name."
+        }
+        else {
+            Reset-BrowserUserData -BrowserName $name -UserDataPath $userDataPath
+            Write-AuditLog -Severity INFO -Action "ResetBrowserProfile" -Message "Full profile reset performed for $name."
+        }
+
+        if ($Restart) {
+            Restart-Browser -BrowserName $name
+        }
+
+        Write-Host ""
+        $processed += $name
     }
 
-    Write-Host "=== Processing $name ===" -ForegroundColor Cyan
-    Write-Verbose "User data path for $name: $userDataPath"
-
-    Stop-BrowserProcess -ProcessNames $processNames
-
-    if ($Backup) {
-        Backup-BrowserProfile -BrowserName $name -UserDataPath $userDataPath
-    }
-
-    if ($ClearCacheOnly) {
-        Clear-BrowserCacheFolders -BrowserName $name -UserDataPath $userDataPath
-    }
-    else {
-        Reset-BrowserUserData -BrowserName $name -UserDataPath $userDataPath
-    }
-
-    if ($Restart) {
-        Restart-Browser -BrowserName $name
-    }
-
-    Write-Host ""
+    Write-AuditLog -Severity INFO -Action "ResetBrowserProfile" -Message "Successfully completed browser reset operations for: $($processed -join ', ')"
+    Write-Host "Browser reset/cleanup operations completed." -ForegroundColor Green
 }
-
-Write-Host "Browser reset/cleanup operations completed." -ForegroundColor Green
+catch {
+    Write-AuditLog -Severity ERROR -Action "ResetBrowserProfile" -Message "Failed browser reset/cleanup operations." -Details $_.Exception.Message
+    Write-Error "Browser reset/cleanup failed: $($_.Exception.Message)"
+}
