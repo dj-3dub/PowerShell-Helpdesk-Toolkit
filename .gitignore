@@ -9,3 +9,21 @@ out/
 # OS/editor
 .DS_Store
 .vscode/
+
+# Generated diagnostic output
+out/HelpdeskLogs/*
+!out/HelpdeskLogs/.gitkeep
+
+# PowerShell test and analysis output
+TestResults/
+coverage.xml
+PSScriptAnalyzerResults.*
+
+# Local configuration
+config/*.local.psd1
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
