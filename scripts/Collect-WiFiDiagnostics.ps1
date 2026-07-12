@@ -139,13 +139,44 @@ Try-Run "Get-NetAdapter + advanced props" {
 # STEP 2: Wlan report (optional)
 if ($IncludeWlanReport) {
   Try-Run "netsh wlan show wlanreport" {
-    (netsh wlan show wlanreport 2>&1) | Out-File (Join-Path $workDir 'netsh_wlan_show_wlanreport_output.txt') -Encoding UTF8
-    $reportPath = Join-Path $env:ProgramData 'Microsoft\Windows\WlanReport\wlan-report-latest.html'
-    if (Test-Path $reportPath) {
-      Copy-Item -Path $reportPath -Destination (Join-Path $workDir 'wlan-report-latest.html') -Force
-    } else {
-      "WLAN report not found at expected path: $reportPath" | Out-File (Join-Path $workDir 'wlan_report_missing.txt') -Encoding UTF8
+    $netsh = Get-Command netsh.exe -ErrorAction SilentlyContinue
+
+    if (-not $netsh) {
+      throw 'netsh.exe was not found. WLAN report generation is only supported on Windows.'
     }
+
+    $commandOutputPath = Join-Path $workDir 'netsh_wlan_show_wlanreport_output.txt'
+    $reportPath = Join-Path $env:ProgramData 'Microsoft\Windows\WlanReport\wlan-report-latest.html'
+    $destinationPath = Join-Path $workDir 'wlan-report-latest.html'
+
+    $commandOutput = & $netsh.Source wlan show wlanreport 2>&1
+    $exitCode = $LASTEXITCODE
+
+    @(
+      "Command: netsh wlan show wlanreport"
+      "ExitCode: $exitCode"
+      ""
+      $commandOutput
+    ) | Out-File -FilePath $commandOutputPath -Encoding UTF8
+
+    if ($exitCode -ne 0) {
+      throw "WLAN report generation failed with exit code $exitCode."
+    }
+
+    if (-not (Test-Path -LiteralPath $reportPath)) {
+      throw "WLAN report command completed, but the report was not found at: $reportPath"
+    }
+
+    Copy-Item `
+      -LiteralPath $reportPath `
+      -Destination $destinationPath `
+      -Force `
+      -ErrorAction Stop
+
+    "WLAN report copied successfully from $reportPath" |
+      Out-File `
+        -FilePath (Join-Path $workDir 'wlan_report_status.txt') `
+        -Encoding UTF8
   }
 }
 
