@@ -16,6 +16,7 @@
     - DNS client information
     - Network adapter and advanced adapter properties
     - Optional Windows WLAN report
+    - WLAN AutoConfig operational events
     - Basic latency tests to the default gateway and a public target
 
   Optional safe remediation is limited to:
@@ -38,18 +39,33 @@
 .PARAMETER PublicTestHost
   Public ping target. The default is 8.8.8.8.
 
-.EXAMPLE
-  .\Collect-WiFiDiagnostics.ps1 -TicketId INC12345 -IncludeWlanReport
+.PARAMETER EventLogHours
+  Number of hours of WLAN AutoConfig events to collect.
+
+  The default is 24 hours. Valid values are 1 through 168.
 
 .EXAMPLE
-  .\Collect-WiFiDiagnostics.ps1 -EnableSafeRemediation
+  .\Collect-WiFiDiagnostics.ps1 `
+    -TicketId INC12345 `
+    -IncludeWlanReport
+
+.EXAMPLE
+  .\Collect-WiFiDiagnostics.ps1 `
+    -EnableSafeRemediation
+
+.EXAMPLE
+  .\Collect-WiFiDiagnostics.ps1 `
+    -TicketId INC12345 `
+    -IncludeWlanReport `
+    -EventLogHours 48
 
 .EXAMPLE
   .\Collect-WiFiDiagnostics.ps1 `
     -TicketId INC12345 `
     -IncludeWlanReport `
     -EnableSafeRemediation `
-    -PublicTestHost 1.1.1.1
+    -PublicTestHost 1.1.1.1 `
+    -EventLogHours 72
 #>
 
 [CmdletBinding()]
@@ -61,7 +77,10 @@ param(
   [switch]$EnableSafeRemediation,
 
   [ValidateNotNullOrEmpty()]
-  [string]$PublicTestHost = '8.8.8.8'
+  [string]$PublicTestHost = '8.8.8.8',
+
+  [ValidateRange(1, 168)]
+  [int]$EventLogHours = 24
 )
 
 Set-StrictMode -Version Latest
@@ -137,7 +156,7 @@ function Invoke-BestEffort {
     return $true
   }
   catch {
-    $message = "ERROR: $Label`: $($_.Exception.Message)"
+    $message = "ERROR: ${Label}: $($_.Exception.Message)"
     Write-Warning $message
 
     if ($ErrorOutputPath) {
@@ -207,6 +226,7 @@ $metadata = @(
   "IncludeWlanReport: $IncludeWlanReport"
   "EnableSafeRemediation: $EnableSafeRemediation"
   "PublicTestHost: $PublicTestHost"
+  "EventLogHours: $EventLogHours"
 )
 
 Write-TextFile `
@@ -424,7 +444,67 @@ if ($IncludeWlanReport) {
     Out-Null
 }
 
-# STEP 3: Basic reachability tests
+# STEP 3: WLAN AutoConfig event-log collection
+
+Invoke-BestEffort `
+  -Label 'WLAN AutoConfig event-log collection' `
+  -ErrorOutputPath $errorLogPath `
+  -ScriptBlock {
+    $wlanLogName = 'Microsoft-Windows-WLAN-AutoConfig/Operational'
+    $startTime = (Get-Date).AddHours(-$EventLogHours)
+
+    $events = @(
+      Get-WinEvent `
+        -FilterHashtable @{
+          LogName   = $wlanLogName
+          StartTime = $startTime
+        } `
+        -ErrorAction Stop |
+        Sort-Object TimeCreated
+    )
+
+    if ($events.Count -eq 0) {
+      Write-TextFile `
+        -Path (Join-Path $workDir 'wlan_autoconfig_events.txt') `
+        -Lines @(
+          "No WLAN AutoConfig events were found during the previous $EventLogHours hours."
+          "Log: $wlanLogName"
+          "StartTime: $startTime"
+        )
+
+      return
+    }
+
+    $events |
+      Select-Object `
+        TimeCreated,
+        Id,
+        LevelDisplayName,
+        ProviderName,
+        MachineName,
+        Message |
+      Format-List |
+      Out-String -Width 240 |
+      Out-File `
+        -FilePath (Join-Path $workDir 'wlan_autoconfig_events.txt') `
+        -Encoding UTF8
+
+    $events |
+      Select-Object `
+        TimeCreated,
+        Id,
+        LevelDisplayName,
+        ProviderName,
+        MachineName,
+        Message |
+      Export-Csv `
+        -Path (Join-Path $workDir 'wlan_autoconfig_events.csv') `
+        -NoTypeInformation `
+        -Encoding UTF8
+  } |
+  Out-Null
+
+# STEP 4: Basic reachability tests
 
 $defaultGateway = $null
 
@@ -477,7 +557,7 @@ Invoke-BestEffort `
   } |
   Out-Null
 
-# STEP 4: Optional safe remediation
+# STEP 5: Optional safe remediation
 
 if ($EnableSafeRemediation -and -not $isAdministrator) {
   Write-Warning 'Safe remediation was requested, but administrative privileges are required.'
@@ -546,7 +626,7 @@ elseif ($EnableSafeRemediation) {
       Write-TextFile `
         -Path (Join-Path $workDir 'remed_wlansvc.txt') `
         -Lines @(
-          "Service: WlanSvc"
+          'Service: WlanSvc'
           "Action: $serviceAction"
           "Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')"
         )
@@ -569,7 +649,7 @@ elseif ($EnableSafeRemediation) {
     Out-Null
 }
 
-# STEP 5: Create the diagnostic bundle
+# STEP 6: Create the diagnostic bundle
 
 try {
   if (Test-Path -LiteralPath $zipPath) {
