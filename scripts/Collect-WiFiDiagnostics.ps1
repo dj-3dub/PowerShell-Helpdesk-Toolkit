@@ -65,9 +65,8 @@ function Write-TextFile([string]$Path, [string[]]$Lines) {
   $Lines | Out-File -FilePath $Path -Encoding UTF8
 }
 
-$scriptDir = Split-Path -Path $MyInvocation.MyCommand.Path -Parent
-$repoRoot  = Split-Path -Path (Split-Path -Path $scriptDir -Parent) -Parent
-$logsRoot  = Join-Path -Path $repoRoot -ChildPath 'out\HelpdeskLogs'
+$repoRoot = Split-Path -Path $PSScriptRoot -Parent
+$logsRoot = Join-Path -Path $repoRoot -ChildPath 'out\HelpdeskLogs'
 New-Dir $logsRoot
 
 $hostname  = $env:COMPUTERNAME
